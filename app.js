@@ -196,20 +196,12 @@
 
     try {
       if (/\.zip$/i.test(file.name) || file.type === "application/zip") {
-        setProgress("ZIPを開いています...", 5, file.name);
-        const zip = await JSZip.loadAsync(file);
-        const xmlEntry =
-          zip.file(/(^|\/)export\.xml$/i)[0] || zip.file("export.xml");
-        if (!xmlEntry) {
-          throw new Error(
-            "ZIP内に export.xml が見つかりませんでした。Apple Healthの書き出しファイルか確認してください。"
-          );
-        }
-        setProgress("解析中...", 10, "0%");
-        // iOSのメモリ制約を考慮し、解凍済みXML全体をメモリに置かず
-        // JSZipから流れてくる文字列チャンクを直接パースする。
-        await parseFromJSZipStream(xmlEntry, (pct) => {
-          setProgress("解析中...", 10 + pct * 0.85, `${Math.round(pct)}%`);
+        setProgress("ZIPを解凍中...", 5, file.name);
+        // fflateで「zipバイト列をチャンクで投入 → 該当ファイルが解凍チャンクで流れてくる」
+        // 形にすることで、zip全体・解凍済みXML全体ともにメモリに乗せずに済む。
+        // iOS Safariのような厳しいメモリ環境向けの根本対策。
+        await parseFromZipStream(file, (pct) => {
+          setProgress("解析中...", 5 + pct * 0.9, `${Math.round(pct)}%`);
         });
       } else if (/\.xml$/i.test(file.name) || file.type === "text/xml") {
         setProgress("解析中...", 10, "0%");
@@ -277,26 +269,88 @@
     }
   }
 
-  // ZIP向け: JSZipのinternalStreamで解凍チャンクを直接受け取りつつ処理。
-  // 解凍済みXML全体をメモリに展開しないので、iOS Safariなど低メモリ環境向け。
-  function parseFromJSZipStream(xmlEntry, onProgress) {
+  // ZIP向け: fflateのUnzipで真のストリーミング解凍を行う。
+  // 元のzip Blobを小さなチャンクで読み込んで unzip.push() に流し、export.xml の
+  // 解凍チャンクが file.ondata で返ってくるのでそのまま makeChunkProcessor に渡す。
+  // zip全体・解凍済みXMLとも一度にメモリに展開しないので、iPhoneでも通る。
+  function parseFromZipStream(blob, onProgress) {
     return new Promise((resolve, reject) => {
+      if (typeof fflate === "undefined" || !fflate.Unzip) {
+        reject(new Error("解凍ライブラリ(fflate)が読み込めませんでした。"));
+        return;
+      }
       const cp = makeChunkProcessor();
-      xmlEntry
-        .internalStream("string")
-        .on("data", (data, metadata) => {
-          cp.process(data, false);
-          if (metadata && typeof metadata.percent === "number") {
-            onProgress(metadata.percent);
+      const decoder = new TextDecoder("utf-8", { fatal: false });
+      let xmlFound = false;
+      let xmlEnded = false;
+      let pushEnded = false;
+      let settled = false;
+
+      const settle = (err) => {
+        if (settled) return;
+        settled = true;
+        err ? reject(err) : resolve();
+      };
+      const tryFinish = () => {
+        if (!pushEnded) return;
+        if (xmlFound && !xmlEnded) return;
+        if (!xmlFound) {
+          settle(
+            new Error(
+              "ZIP内に export.xml が見つかりませんでした。Apple Healthの書き出しファイルか確認してください。"
+            )
+          );
+        } else {
+          settle();
+        }
+      };
+
+      const unzip = new fflate.Unzip();
+      unzip.register(fflate.UnzipInflate);
+      unzip.onfile = (entry) => {
+        if (xmlFound) return; // 既に見つけたら他はスキップ
+        if (!/(^|\/)export\.xml$/i.test(entry.name)) return;
+        xmlFound = true;
+        entry.ondata = (err, data, final) => {
+          if (err) {
+            settle(err);
+            return;
           }
-        })
-        .on("error", (e) => reject(e))
-        .on("end", () => {
-          cp.process("", true);
-          onProgress(100);
-          resolve();
-        })
-        .resume();
+          if (data && data.byteLength) {
+            cp.process(decoder.decode(data, { stream: !final }), false);
+          }
+          if (final) {
+            const tail = decoder.decode();
+            if (tail) cp.process(tail, false);
+            cp.process("", true);
+            xmlEnded = true;
+            tryFinish();
+          }
+        };
+        entry.start();
+      };
+
+      (async () => {
+        const CHUNK_SIZE = 2 * 1024 * 1024; // 2MB
+        const total = blob.size;
+        let offset = 0;
+        try {
+          while (offset < total) {
+            const end = Math.min(offset + CHUNK_SIZE, total);
+            const buf = await blob.slice(offset, end).arrayBuffer();
+            const arr = new Uint8Array(buf);
+            const isLast = end >= total;
+            unzip.push(arr, isLast);
+            offset = end;
+            onProgress((offset / total) * 100);
+            await new Promise((r) => setTimeout(r, 0));
+          }
+          pushEnded = true;
+          tryFinish();
+        } catch (e) {
+          settle(e);
+        }
+      })();
     });
   }
 

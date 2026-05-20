@@ -55,9 +55,9 @@
               データはお使いのブラウザ内でのみ処理され、どこにも送信されません。
             </p>
             <p class="muted small">
-              iPhoneのSafariはメモリ上限が厳しいため、書き出しデータが大きい場合（数百MB級）は
-              タブがリロードされて読み込めないことがあります。その場合はPC/Macのブラウザから
-              お試しください。
+              iPhone Safariでもストリーミング解凍で動作しますが、機種やXMLサイズによっては
+              タブが再読み込みされる場合があります。その時はファイルアプリで先にZIPを展開し、
+              中の <code>export.xml</code> を直接ドロップしてみてください。
             </p>
           </details>
         </div>
@@ -108,7 +108,7 @@
       </section>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="app.js"></script>
   </body>
