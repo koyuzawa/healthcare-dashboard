@@ -35,3 +35,13 @@ iPhone「ヘルスケア」アプリから書き出した `export.zip` / `export
 python3 -m http.server 8000
 # → http://localhost:8000 を開く
 ```
+
+## デプロイ（GitHub Pages）
+
+`main` ブランチに push されると `.github/workflows/pages.yml` が走り、自動で
+GitHub Pages にデプロイされます。初回だけリポジトリ設定が必要です。
+
+1. GitHub → リポジトリ → **Settings** → **Pages**
+2. **Source** を **GitHub Actions** に変更（"Deploy from a branch" ではない方）
+3. `main` に変更を push（またはActionsタブから "Deploy to GitHub Pages" を手動実行）
+4. 公開先: `https://<ユーザー名>.github.io/healthcare-dashboard/`
