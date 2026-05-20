@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ヘルスケアダッシュボード</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <h1>ヘルスケアダッシュボード</h1>
+      </div>
+      <div class="topbar-actions">
+        <button id="reset-btn" class="ghost" hidden>別のファイルを読み込む</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- アップロード画面 -->
+      <section id="upload-view" class="view">
+        <div class="upload-card">
+          <h2>iPhoneのヘルスケアデータをアップロード</h2>
+          <p class="muted">
+            iPhone の「ヘルスケア」→ プロフィール（右上）→「すべてのヘルスケアデータを書き出す」で生成される
+            <code>export.zip</code> または <code>export.xml</code> をそのままドロップしてください。
+          </p>
+
+          <label id="drop-zone" for="file-input" class="drop-zone">
+            <div class="drop-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </div>
+            <div class="drop-text">
+              <strong>ファイルをドロップ</strong> または クリックして選択
+            </div>
+            <div class="muted small">.zip / .xml 形式に対応</div>
+            <input id="file-input" type="file" accept=".zip,.xml,application/zip,text/xml" hidden />
+          </label>
+
+          <details class="howto">
+            <summary>書き出し方法の手順</summary>
+            <ol>
+              <li>iPhone の「ヘルスケア」アプリを開く</li>
+              <li>右上のプロフィール画像をタップ</li>
+              <li>一番下の「すべてのヘルスケアデータを書き出す」を選択</li>
+              <li>生成された <code>export.zip</code> をこのPCに送り（AirDrop / メール / iCloudなど）、そのままドロップ</li>
+            </ol>
+            <p class="muted small">
+              データはお使いのブラウザ内でのみ処理され、どこにも送信されません。
+            </p>
+          </details>
+        </div>
+      </section>
+
+      <!-- ローディング -->
+      <section id="loading-view" class="view" hidden>
+        <div class="loading-card">
+          <div class="spinner" aria-hidden="true"></div>
+          <div id="loading-text">読み込み中...</div>
+          <div class="progress-bar"><div id="progress-fill"></div></div>
+          <div id="progress-detail" class="muted small"></div>
+        </div>
+      </section>
+
+      <!-- ダッシュボード -->
+      <section id="dashboard-view" class="view" hidden>
+        <div class="dashboard-header">
+          <div>
+            <h2 id="dashboard-title">サマリー</h2>
+            <div id="date-range-label" class="muted small"></div>
+          </div>
+          <div class="range-selector" role="tablist" aria-label="期間">
+            <button data-range="7" class="range-btn">7日</button>
+            <button data-range="30" class="range-btn is-active">30日</button>
+            <button data-range="90" class="range-btn">90日</button>
+            <button data-range="365" class="range-btn">1年</button>
+            <button data-range="all" class="range-btn">全期間</button>
+          </div>
+        </div>
+
+        <div id="stats-grid" class="stats-grid"></div>
+        <div id="charts-grid" class="charts-grid"></div>
+
+        <footer class="footnote muted small">
+          表示しているデータは全てブラウザ内で処理されています。ページを閉じるとクリアされます。
+        </footer>
+      </section>
+
+      <!-- エラー -->
+      <section id="error-view" class="view" hidden>
+        <div class="error-card">
+          <div class="error-icon">!</div>
+          <h2>読み込みに失敗しました</h2>
+          <p id="error-text" class="muted"></p>
+          <button id="error-back" class="primary">戻る</button>
+        </div>
+      </section>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
