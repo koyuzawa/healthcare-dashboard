@@ -195,9 +195,8 @@
     setProgress("読み込み中...", 0, file.name);
 
     try {
-      let xmlBlob;
       if (/\.zip$/i.test(file.name) || file.type === "application/zip") {
-        setProgress("ZIPを展開中...", 5, file.name);
+        setProgress("ZIPを開いています...", 5, file.name);
         const zip = await JSZip.loadAsync(file);
         const xmlEntry =
           zip.file(/(^|\/)export\.xml$/i)[0] || zip.file("export.xml");
@@ -206,17 +205,20 @@
             "ZIP内に export.xml が見つかりませんでした。Apple Healthの書き出しファイルか確認してください。"
           );
         }
-        xmlBlob = await xmlEntry.async("blob");
+        setProgress("解析中...", 10, "0%");
+        // iOSのメモリ制約を考慮し、解凍済みXML全体をメモリに置かず
+        // JSZipから流れてくる文字列チャンクを直接パースする。
+        await parseFromJSZipStream(xmlEntry, (pct) => {
+          setProgress("解析中...", 10 + pct * 0.85, `${Math.round(pct)}%`);
+        });
       } else if (/\.xml$/i.test(file.name) || file.type === "text/xml") {
-        xmlBlob = file;
+        setProgress("解析中...", 10, "0%");
+        await parseFromBlob(file, (pct) => {
+          setProgress("解析中...", 10 + pct * 0.85, `${Math.round(pct)}%`);
+        });
       } else {
         throw new Error(".zip または .xml ファイルを選択してください。");
       }
-
-      setProgress("解析中...", 10, "0%");
-      await parseAndAggregate(xmlBlob, (pct) => {
-        setProgress("解析中...", 10 + pct * 0.85, `${Math.round(pct)}%`);
-      });
 
       setProgress("ダッシュボードを描画中...", 98, "");
       renderDashboard();
@@ -227,51 +229,75 @@
     }
   }
 
-  // ===== XML パース + 集計（ストリーミング）======================================
-  async function parseAndAggregate(blob, onProgress) {
-    const CHUNK_SIZE = 8 * 1024 * 1024; // 8MB
-    const total = blob.size;
-    let offset = 0;
+  // ===== XML パース + 集計 =======================================================
+  // チャンクで来た文字列を、タグ境界で安全に切りながら <Record> 抽出する小ヘルパ。
+  // パース中に日次バケットへ集計するので、生レコードはメモリに残さない。
+  function makeChunkProcessor() {
     let leftover = "";
-
-    // 全ての <Record .../> をマッチ。Workout や ExportDate はスキップ。
-    // 自己終了タグだけでなく <Record ...> ... </Record> 形式も存在しうるが、
-    // 集計に必要な属性は開始タグに揃っているため属性のみ抜き出せばよい。
     const recordRe = /<Record\s+([^>]+?)\/?>/g;
+    return {
+      process(text, isFinal) {
+        let combined = leftover + text;
+        let processed, remaining;
+        if (isFinal) {
+          processed = combined;
+          remaining = "";
+        } else {
+          const cutoff = combined.lastIndexOf(">");
+          if (cutoff === -1) {
+            leftover = combined;
+            return;
+          }
+          processed = combined.substring(0, cutoff + 1);
+          remaining = combined.substring(cutoff + 1);
+        }
+        let m;
+        recordRe.lastIndex = 0;
+        while ((m = recordRe.exec(processed)) !== null) {
+          ingestRecord(m[1]);
+        }
+        leftover = remaining;
+      },
+    };
+  }
 
+  // 生XMLファイル向け: Blobをチャンク読みして処理
+  async function parseFromBlob(blob, onProgress) {
+    const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
+    const total = blob.size;
+    const cp = makeChunkProcessor();
+    let offset = 0;
     while (offset < total) {
       const end = Math.min(offset + CHUNK_SIZE, total);
       const chunkText = await blob.slice(offset, end).text();
-      let text = leftover + chunkText;
-
-      // タグ境界で切る（最後の '>' まで処理し、それ以降は次チャンクへ持ち越し）
-      let cutoff;
-      if (end < total) {
-        cutoff = text.lastIndexOf(">");
-        if (cutoff === -1) {
-          // タグ境界が見つからない異常ケース：そのまま持ち越して次へ
-          leftover = text;
-          offset = end;
-          continue;
-        }
-        cutoff += 1;
-      } else {
-        cutoff = text.length;
-      }
-      const processed = text.substring(0, cutoff);
-      leftover = text.substring(cutoff);
-
-      let m;
-      recordRe.lastIndex = 0;
-      while ((m = recordRe.exec(processed)) !== null) {
-        ingestRecord(m[1]);
-      }
-
+      cp.process(chunkText, end >= total);
       offset = end;
       onProgress((offset / total) * 100);
-      // UIスレッドに譲る
       await new Promise((r) => setTimeout(r, 0));
     }
+  }
+
+  // ZIP向け: JSZipのinternalStreamで解凍チャンクを直接受け取りつつ処理。
+  // 解凍済みXML全体をメモリに展開しないので、iOS Safariなど低メモリ環境向け。
+  function parseFromJSZipStream(xmlEntry, onProgress) {
+    return new Promise((resolve, reject) => {
+      const cp = makeChunkProcessor();
+      xmlEntry
+        .internalStream("string")
+        .on("data", (data, metadata) => {
+          cp.process(data, false);
+          if (metadata && typeof metadata.percent === "number") {
+            onProgress(metadata.percent);
+          }
+        })
+        .on("error", (e) => reject(e))
+        .on("end", () => {
+          cp.process("", true);
+          onProgress(100);
+          resolve();
+        })
+        .resume();
+    });
   }
 
   function ingestRecord(attrsStr) {
