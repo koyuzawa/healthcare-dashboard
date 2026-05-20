@@ -9,11 +9,91 @@
 
   // ===== メトリクス定義 =========================================================
   // aggregation:
-  //   sum    : 日次合計（歩数、距離、消費カロリーなど）
+  //   sum    : 日次合計（歩数、距離、摂取/消費カロリー、栄養素など）
   //   avg    : 日次平均（心拍など）
-  //   last   : 日次の最終値（体重など、スパースな値）
+  //   last   : 日次の最終値（体重・体脂肪率など、スパースな値）
   //   sleep  : SleepAnalysis のカテゴリ値から「睡眠」時間を計算
+  //
+  // ダイエット向けの並び: 体組成 → カロリー収支 → 運動量 → 栄養 → コンディション
   const METRICS = {
+    // --- 体組成 ---
+    BodyMass: {
+      key: "BodyMass",
+      label: "体重",
+      type: "HKQuantityTypeIdentifierBodyMass",
+      aggregation: "last",
+      unit: "kg",
+      color: "#8b5cf6",
+      format: (v) => v.toFixed(1),
+    },
+    BodyFatPercentage: {
+      key: "BodyFatPercentage",
+      label: "体脂肪率",
+      type: "HKQuantityTypeIdentifierBodyFatPercentage",
+      aggregation: "last",
+      unit: "%",
+      color: "#f97316",
+      // Apple Healthでは比率(0〜1)で記録されることが多い。1以下なら100倍してパーセント表示。
+      format: (v) => (v <= 1 ? v * 100 : v).toFixed(1),
+    },
+    BodyMassIndex: {
+      key: "BodyMassIndex",
+      label: "BMI",
+      type: "HKQuantityTypeIdentifierBodyMassIndex",
+      aggregation: "last",
+      unit: "",
+      color: "#d946ef",
+      format: (v) => v.toFixed(1),
+    },
+    LeanBodyMass: {
+      key: "LeanBodyMass",
+      label: "除脂肪体重",
+      type: "HKQuantityTypeIdentifierLeanBodyMass",
+      aggregation: "last",
+      unit: "kg",
+      color: "#0ea5e9",
+      format: (v) => v.toFixed(1),
+    },
+
+    // --- カロリー収支 ---
+    DietaryEnergyConsumed: {
+      key: "DietaryEnergyConsumed",
+      label: "摂取カロリー",
+      type: "HKQuantityTypeIdentifierDietaryEnergyConsumed",
+      aggregation: "sum",
+      unit: "kcal",
+      color: "#22c55e",
+      format: (v) => Math.round(v).toLocaleString(),
+    },
+    ActiveEnergyBurned: {
+      key: "ActiveEnergyBurned",
+      label: "アクティブエネルギー",
+      type: "HKQuantityTypeIdentifierActiveEnergyBurned",
+      aggregation: "sum",
+      unit: "kcal",
+      color: "#f59e0b",
+      format: (v) => Math.round(v).toLocaleString(),
+    },
+    BasalEnergyBurned: {
+      key: "BasalEnergyBurned",
+      label: "基礎代謝",
+      type: "HKQuantityTypeIdentifierBasalEnergyBurned",
+      aggregation: "sum",
+      unit: "kcal",
+      color: "#fbbf24",
+      format: (v) => Math.round(v).toLocaleString(),
+    },
+
+    // --- 運動量 ---
+    AppleExerciseTime: {
+      key: "AppleExerciseTime",
+      label: "運動時間",
+      type: "HKQuantityTypeIdentifierAppleExerciseTime",
+      aggregation: "sum",
+      unit: "分",
+      color: "#10b981",
+      format: (v) => Math.round(v).toLocaleString(),
+    },
     StepCount: {
       key: "StepCount",
       label: "歩数",
@@ -32,15 +112,6 @@
       color: "#06b6d4",
       format: (v) => v.toFixed(2),
     },
-    ActiveEnergyBurned: {
-      key: "ActiveEnergyBurned",
-      label: "アクティブエネルギー",
-      type: "HKQuantityTypeIdentifierActiveEnergyBurned",
-      aggregation: "sum",
-      unit: "kcal",
-      color: "#f59e0b",
-      format: (v) => Math.round(v).toLocaleString(),
-    },
     FlightsClimbed: {
       key: "FlightsClimbed",
       label: "上った階数",
@@ -50,6 +121,64 @@
       color: "#14b8a6",
       format: (v) => Math.round(v).toLocaleString(),
     },
+
+    // --- 栄養素 ---
+    DietaryProtein: {
+      key: "DietaryProtein",
+      label: "タンパク質",
+      type: "HKQuantityTypeIdentifierDietaryProtein",
+      aggregation: "sum",
+      unit: "g",
+      color: "#dc2626",
+      format: (v) => v.toFixed(1),
+    },
+    DietaryFatTotal: {
+      key: "DietaryFatTotal",
+      label: "脂質",
+      type: "HKQuantityTypeIdentifierDietaryFatTotal",
+      aggregation: "sum",
+      unit: "g",
+      color: "#eab308",
+      format: (v) => v.toFixed(1),
+    },
+    DietaryCarbohydrates: {
+      key: "DietaryCarbohydrates",
+      label: "炭水化物",
+      type: "HKQuantityTypeIdentifierDietaryCarbohydrates",
+      aggregation: "sum",
+      unit: "g",
+      color: "#84cc16",
+      format: (v) => v.toFixed(1),
+    },
+    DietarySugar: {
+      key: "DietarySugar",
+      label: "糖質",
+      type: "HKQuantityTypeIdentifierDietarySugar",
+      aggregation: "sum",
+      unit: "g",
+      color: "#a855f7",
+      format: (v) => v.toFixed(1),
+    },
+    DietaryFiber: {
+      key: "DietaryFiber",
+      label: "食物繊維",
+      type: "HKQuantityTypeIdentifierDietaryFiber",
+      aggregation: "sum",
+      unit: "g",
+      color: "#65a30d",
+      format: (v) => v.toFixed(1),
+    },
+    DietaryWater: {
+      key: "DietaryWater",
+      label: "水分",
+      type: "HKQuantityTypeIdentifierDietaryWater",
+      aggregation: "sum",
+      unit: "mL",
+      color: "#38bdf8",
+      format: (v) => Math.round(v).toLocaleString(),
+    },
+
+    // --- コンディション ---
     HeartRate: {
       key: "HeartRate",
       label: "心拍数（平均）",
@@ -67,15 +196,6 @@
       unit: "bpm",
       color: "#ec4899",
       format: (v) => Math.round(v).toLocaleString(),
-    },
-    BodyMass: {
-      key: "BodyMass",
-      label: "体重",
-      type: "HKQuantityTypeIdentifierBodyMass",
-      aggregation: "last",
-      unit: "kg",
-      color: "#8b5cf6",
-      format: (v) => v.toFixed(1),
     },
     SleepAnalysis: {
       key: "SleepAnalysis",
@@ -565,10 +685,7 @@
             tooltip: {
               callbacks: {
                 title: (items) => formatJP(items[0].label),
-                label: (item) => {
-                  const v = item.parsed.y;
-                  return `${m.format(v)} ${unitLabel(m)}`;
-                },
+                label: (item) => withUnit(m.format(item.parsed.y), m),
               },
             },
           },
@@ -632,6 +749,12 @@
     return hasAny ? out : [];
   }
 
+  // 単位ありなら "値 単位"、なし(BMI)なら値のみを返す
+  function withUnit(formatted, metric) {
+    const u = unitLabel(metric);
+    return u ? `${formatted} ${u}` : formatted;
+  }
+
   function summarize(metric, series) {
     const vals = series
       .map((p) => p.value)
@@ -646,14 +769,14 @@
       const avg = nonZero.length ? sum / nonZero.length : 0;
       primary = avg;
       label = `平均/日`;
-      sub = `合計 ${metric.format(sum)} ${unitLabel(metric)}`;
+      sub = `合計 ${withUnit(metric.format(sum), metric)}`;
     } else if (metric.aggregation === "avg") {
       const sum = vals.reduce((a, b) => a + b, 0);
       primary = sum / vals.length;
       label = `平均`;
       const max = Math.max(...vals);
       const min = Math.min(...vals);
-      sub = `${metric.format(min)}〜${metric.format(max)} ${unitLabel(metric)}`;
+      sub = `${metric.format(min)}〜${withUnit(metric.format(max), metric)}`;
     } else {
       // last
       const last = vals[vals.length - 1];
@@ -664,27 +787,27 @@
       const sign = diff > 0 ? "+" : "";
       sub =
         vals.length > 1
-          ? `期間内 ${sign}${metric.format(diff)} ${unitLabel(metric)}`
+          ? `期間内 ${sign}${withUnit(metric.format(diff), metric)}`
           : "";
     }
     return {
       primaryFormatted: metric.format(primary),
       primaryUnit: unitLabel(metric),
-      sub: `${label}・${sub}`,
+      sub: sub ? `${label}・${sub}` : label,
     };
   }
 
   function unitLabel(metric) {
-    // SleepAnalysis は固定で「時間」、距離は km と仮定（mi のときは元単位を表示）
     if (metric.aggregation === "sleep") return "時間";
-    const u = units[metric.key];
-    if (!u) return metric.unit;
-    // Apple Healthのデフォルト単位はmetric.unitと一致することが多い。
-    // unitが`count`や`count/min`などのときは独自ラベルを優先
-    if (metric.key === "StepCount") return "歩";
-    if (metric.key === "FlightsClimbed") return "階";
-    if (metric.key === "HeartRate" || metric.key === "RestingHeartRate") return "bpm";
-    return u;
+    // 体重・除脂肪体重・距離はユーザー設定で単位が変わりうるので、実データの単位を優先。
+    if (
+      metric.key === "BodyMass" ||
+      metric.key === "LeanBodyMass" ||
+      metric.key === "DistanceWalkingRunning"
+    ) {
+      return units[metric.key] || metric.unit;
+    }
+    return metric.unit;
   }
 
   function isoDate(d) {
